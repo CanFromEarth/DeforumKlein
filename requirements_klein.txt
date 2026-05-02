@@ -25,7 +25,9 @@ numpngw
 numexpr
 pydantic
 timm
-onnxruntime
+matplotlib
+scikit-image
+scikit-learn
 
 # Optional (depth estimation etc.)
 torchmetrics
