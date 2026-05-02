@@ -147,7 +147,13 @@ class KleinModel:
         from huggingface_hub import hf_hub_download
         print("Loading FLUX.2 VAE ...")
         vae_path = hf_hub_download("Comfy-Org/flux2-dev", filename="split_files/vae/flux2-vae.safetensors", token=hf_token)
-        vae = AutoencoderKL.from_single_file(vae_path, torch_dtype=torch.bfloat16)
+        vae = AutoencoderKL.from_single_file(
+            vae_path,
+            config="black-forest-labs/FLUX.2-klein-4B",
+            subfolder="vae",
+            torch_dtype=torch.bfloat16,
+            token=hf_token,
+        )
 
         print(f"Loading {model_id} ...")
         self.pipe = Flux2KleinPipeline.from_pretrained(
