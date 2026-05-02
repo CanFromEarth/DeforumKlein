@@ -136,32 +136,28 @@ class KleinModel:
     """Load FLUX.2-klein-4B through HuggingFace diffusers."""
 
     def __init__(self, model_id="black-forest-labs/FLUX.2-klein-4B", offload=True):
-        from diffusers import Flux2KleinPipeline, AutoencoderKL
+        from diffusers import Flux2KleinPipeline
+        from huggingface_hub import hf_hub_download
+        from safetensors.torch import load_file
 
         # HuggingFace auth — needed if the model is gated
         hf_token = os.environ.get("HF_TOKEN", None)
         if hf_token:
             print(f"Using HF_TOKEN for authentication")
 
-        # Load FLUX.2 VAE (32ch latent space)
-        from huggingface_hub import hf_hub_download
-        print("Loading FLUX.2 VAE ...")
-        vae_path = hf_hub_download("Comfy-Org/flux2-dev", filename="split_files/vae/flux2-vae.safetensors", token=hf_token)
-        vae = AutoencoderKL.from_single_file(
-            vae_path,
-            config="black-forest-labs/FLUX.2-klein-4B",
-            subfolder="vae",
+        print(f"Loading {model_id} ...")
+        self.pipe = Flux2KleinPipeline.from_pretrained(
+            model_id,
             torch_dtype=torch.bfloat16,
             token=hf_token,
         )
 
-        print(f"Loading {model_id} ...")
-        self.pipe = Flux2KleinPipeline.from_pretrained(
-            model_id,
-            vae=vae,
-            torch_dtype=torch.bfloat16,
-            token=hf_token,
-        )
+        # Replace VAE weights with FLUX.2 VAE (correct 32ch latent space)
+        print("Loading FLUX.2 VAE weights ...")
+        vae_path = hf_hub_download("Comfy-Org/flux2-dev", filename="split_files/vae/flux2-vae.safetensors", token=hf_token)
+        vae_state_dict = load_file(vae_path)
+        self.pipe.vae.load_state_dict(vae_state_dict)
+        print("FLUX.2 VAE loaded")
 
         if offload:
             self.pipe.enable_model_cpu_offload()
