@@ -1,0 +1,32 @@
+# Core
+torch
+torchvision
+torchaudio
+
+# FLUX.2-klein-4B via diffusers (install from git for latest FLUX.2 support)
+# pip install git+https://github.com/huggingface/diffusers.git
+diffusers
+accelerate
+transformers
+huggingface-hub
+safetensors
+
+# Deforum dependencies
+einops
+pytorch-lightning
+opencv-python
+numpy
+pandas
+scipy
+Pillow
+tqdm
+requests
+numpngw
+numexpr
+pydantic
+timm
+onnxruntime
+
+# Optional (depth estimation etc.)
+torchmetrics
+lightning-utilities
