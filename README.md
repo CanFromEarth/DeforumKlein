@@ -3,8 +3,8 @@
 
 ### Clone repository
 ```bash
-git clone --recurse-submodules https://github.com/XLabs-AI/deforum-x-flux.git
-cd deforum-x-flux
+git clone https://github.com/CanFromEarth/DeforumKlein.git
+cd DeforumKlein
 ```
 
 ### Create virtual environment
