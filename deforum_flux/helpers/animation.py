@@ -21,7 +21,7 @@ def sample_from_cv2(sample: np.ndarray) -> torch.Tensor:
     return sample
 
 def sample_to_cv2(sample: torch.Tensor, type=np.uint8) -> np.ndarray:
-    sample_f32 = rearrange(sample.squeeze().cpu().numpy(), "c h w -> h w c").astype(np.float32)
+    sample_f32 = rearrange(sample.squeeze().cpu().float().numpy(), "c h w -> h w c").astype(np.float32)
     sample_f32 = ((sample_f32 * 0.5) + 0.5).clip(0, 1)
     sample_int8 = (sample_f32 * 255)
     return sample_int8.astype(type)
