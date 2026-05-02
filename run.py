@@ -125,12 +125,10 @@ class Model:
             print("Using HF_TOKEN for authentication")
 
         # Load FLUX.2 VAE (32ch latent space)
+        from huggingface_hub import hf_hub_download
         print("Loading FLUX.2 VAE ...")
-        vae = AutoencoderKL.from_single_file(
-            "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors",
-            torch_dtype=torch.bfloat16,
-            token=hf_token,
-        )
+        vae_path = hf_hub_download("Comfy-Org/flux2-dev", filename="split_files/vae/flux2-vae.safetensors", token=hf_token)
+        vae = AutoencoderKL.from_single_file(vae_path, torch_dtype=torch.bfloat16)
 
         print(f"Loading {model_id} ...")
         self.pipe = Flux2KleinPipeline.from_pretrained(
