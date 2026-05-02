@@ -136,16 +136,25 @@ class KleinModel:
     """Load FLUX.2-klein-4B through HuggingFace diffusers."""
 
     def __init__(self, model_id="black-forest-labs/FLUX.2-klein-4B", offload=True):
-        from diffusers import Flux2KleinPipeline
+        from diffusers import Flux2KleinPipeline, AutoencoderKL
 
         # HuggingFace auth — needed if the model is gated
         hf_token = os.environ.get("HF_TOKEN", None)
         if hf_token:
             print(f"Using HF_TOKEN for authentication")
 
+        # Load FLUX.2 VAE (32ch latent space)
+        print("Loading FLUX.2 VAE ...")
+        vae = AutoencoderKL.from_single_file(
+            "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors",
+            torch_dtype=torch.bfloat16,
+            token=hf_token,
+        )
+
         print(f"Loading {model_id} ...")
         self.pipe = Flux2KleinPipeline.from_pretrained(
             model_id,
+            vae=vae,
             torch_dtype=torch.bfloat16,
             token=hf_token,
         )
