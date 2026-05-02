@@ -1,10 +1,9 @@
 """
 generate.py - FLUX.2-klein-4B image generation for Deforum
 
-Uses diffusers Flux2KleinPipeline. Every frame is txt2img —
-Klein is a distilled model that doesn't support classical img2img
-via latent noise injection. Frame-to-frame coherence comes from
-Deforum's warping + color matching.
+Uses diffusers Flux2KleinPipeline. Every frame is txt2img, then
+blended with the warped previous frame for animation coherence.
+Klein is distilled and doesn't support classical latent-space img2img.
 """
 
 import os
@@ -31,7 +30,7 @@ def uint_number(datum, number):
 
 
 def generate(args, root, frame=0, return_latent=False, return_sample=False, return_c=False):
-    """Generate an image using FLUX.2-klein-4B (txt2img every frame)."""
+    """Generate an image using FLUX.2-klein-4B."""
     seed_everything(args.seed)
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -56,6 +55,13 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
         )
         x_samples = output.images * 2.0 - 1.0  # [0,1] → [-1,1]
         x_samples = x_samples.to(device)
+
+        # Blend with warped previous frame for animation coherence
+        # strength controls how much new content vs previous frame:
+        #   strength=1.0 → fully new (first frame)
+        #   strength=0.3 → 30% new + 70% warped previous
+        if args.init_sample is not None and args.strength < 1.0:
+            x_samples = args.strength * x_samples + (1.0 - args.strength) * args.init_sample.to(device)
 
         # --- Collect results ---
 
