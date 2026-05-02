@@ -4,7 +4,7 @@ generate.py - FLUX.2-klein-4B image generation for Deforum
 Uses diffusers Flux2KleinPipeline. Provides generate() / add_noise()
 interface for render.py.
 
-img2img via flow-matching noise injection with latent channel matching.
+img2img via flow-matching noise injection.
 """
 
 import os
@@ -30,15 +30,6 @@ def uint_number(datum, number):
     return datum
 
 
-def _get_latent_shape(pipe, height, width):
-    """Get the correct latent (B, C, H, W) shape the pipeline expects."""
-    num_ch = pipe.transformer.config.in_channels // 4
-    vae_scale = pipe.vae_scale_factor
-    h_lat = height // vae_scale
-    w_lat = width // vae_scale
-    return (1, num_ch, h_lat, w_lat)
-
-
 def _vae_encode(pipe, image_tensor):
     """Encode image tensor [B, C, H, W] in [-1, 1] to scaled latent space."""
     vae = pipe.vae
@@ -59,6 +50,18 @@ def _vae_encode(pipe, image_tensor):
         latent = latent - cfg.shift_factor
 
     return latent
+
+
+def _fold_patches(latents):
+    """Fold 2x2 spatial patches into channels: (B,C,H,W) → (B,C*4,H/2,W/2).
+
+    This is the format Klein's prepare_latents expects for custom latents.
+    """
+    B, C, H, W = latents.shape
+    latents = latents.view(B, C, H // 2, 2, W // 2, 2)
+    latents = latents.permute(0, 1, 3, 5, 2, 4)  # (B, C, 2, 2, H/2, W/2)
+    latents = latents.reshape(B, C * 4, H // 2, W // 2)
+    return latents
 
 
 def _vae_decode(pipe, latent):
@@ -84,28 +87,6 @@ def _tensor_to_pil(tensor):
     return Image.fromarray(img)
 
 
-def _match_latent_channels(latent, target_channels, noise_fill=None):
-    """Pad or trim latent channels to match what the transformer expects.
-
-    Extra channels are filled with noise_fill if provided, else zeros.
-    """
-    vae_ch = latent.shape[1]
-    if vae_ch == target_channels:
-        return latent
-    if vae_ch > target_channels:
-        return latent[:, :target_channels, :, :]
-    # Pad: fill extra channels
-    pad_ch = target_channels - vae_ch
-    if noise_fill is not None:
-        padding = noise_fill[:, vae_ch:target_channels, :, :]
-    else:
-        padding = torch.zeros(
-            latent.shape[0], pad_ch, latent.shape[2], latent.shape[3],
-            dtype=latent.dtype, device=latent.device
-        )
-    return torch.cat([latent, padding], dim=1)
-
-
 def generate(args, root, frame=0, return_latent=False, return_sample=False, return_c=False):
     """Generate an image using FLUX.2-klein-4B."""
     seed_everything(args.seed)
@@ -120,9 +101,13 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
     if batch_size > 1:
         raise NotImplementedError("Batch size > 1 not supported yet")
 
-    # Correct latent shape for this pipeline
-    latent_shape = _get_latent_shape(pipe, args.H, args.W)
-    target_channels = latent_shape[1]
+    # Pipeline expects latents as (B, C*4, H/2, W/2) — patches folded into channels.
+    # For 1024x1024, vae_scale=8: latent spatial = 128x128, folded = (128, 64, 64)
+    num_ch = pipe.transformer.config.in_channels // 4  # 32
+    vae_scale = pipe.vae_scale_factor  # 8
+    h_lat = 2 * (args.H // (vae_scale * 2))  # 128
+    w_lat = 2 * (args.W // (vae_scale * 2))   # 128
+    folded_shape = (batch_size, num_ch * 4, h_lat // 2, w_lat // 2)  # (1, 128, 64, 64)
 
     # --- Resolve init image / latent ---
     init_latent = None
@@ -160,19 +145,18 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
     with torch.no_grad():
         if init_latent is not None and args.strength > 0:
             # === IMG2IMG — flow-matching noise injection ===
-            # Generate noise in the shape the transformer expects
+
+            # Fold VAE latent (B,C,H,W) → (B,C*4,H/2,W/2) to match pipeline format
+            init_latent_folded = _fold_patches(init_latent)
+
+            # Generate noise in the folded shape
             noise = torch.randn(
-                latent_shape, dtype=dtype,
+                folded_shape, dtype=dtype,
                 generator=torch.Generator(device="cpu").manual_seed(args.seed),
             ).to(device=device)
 
-            # Match VAE latent channels to transformer channels
-            init_latent_matched = _match_latent_channels(
-                init_latent, target_channels, noise_fill=noise
-            )
-
             t = args.strength
-            noisy_latent = t * noise + (1.0 - t) * init_latent_matched
+            noisy_latent = t * noise + (1.0 - t) * init_latent_folded
 
             output = pipe(
                 prompt=cond_prompt,
