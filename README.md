@@ -9,21 +9,23 @@ git clone https://github.com/CanFromEarth/DeforumKlein.git
 cd DeforumKlein
 ```
 
-### Create virtual environment
-```
-python3 -m venv deforum_xflux_env
-source deforum_xflux_env/bin/activate
+### Install PyTorch (CUDA 12.4)
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ### Install requirements
 ```bash
-python3 -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Run from CLI
 ```bash
 python run.py
 ```
+
+## Recommended RunPod Template
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 
 ## Acknowledgements
 - [Deforum](https://github.com/deforum-art/deforum-stable-diffusion) for the animation framework

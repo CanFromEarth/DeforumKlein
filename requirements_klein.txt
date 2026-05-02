@@ -1,10 +1,7 @@
-# Core
-torch
-torchvision
-torchaudio
+# NOTE: Install PyTorch first with the correct CUDA version (see README)
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# FLUX.2-klein-4B via diffusers (install from git for latest FLUX.2 support)
-# pip install git+https://github.com/huggingface/diffusers.git
+# FLUX.2-klein-4B via diffusers
 diffusers
 accelerate
 transformers

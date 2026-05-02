@@ -231,13 +231,13 @@ def render_animation(root, anim_args, args, cond_prompts, uncond_prompts):
         args.timestring = anim_args.resume_timestring
 
     # expand cond prompts out to per-frame
-    cond_prompt_series = pd.Series([np.nan for a in range(anim_args.max_frames)])
+    cond_prompt_series = pd.Series([None] * anim_args.max_frames, dtype=object)
     for i, prompt in cond_prompts.items():
         cond_prompt_series[int(i)] = prompt
     cond_prompt_series = cond_prompt_series.ffill().bfill()
 
     # expand uncond prompts out to per-frame
-    uncond_prompt_series = pd.Series([np.nan for a in range(anim_args.max_frames)])
+    uncond_prompt_series = pd.Series([None] * anim_args.max_frames, dtype=object)
     for i, prompt in uncond_prompts.items():
         uncond_prompt_series[int(i)] = prompt
     uncond_prompt_series = uncond_prompt_series.ffill().bfill()
