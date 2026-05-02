@@ -187,7 +187,7 @@ print(f"[DEBUG] VAE scale factor: {root.pipe.vae_scale_factor}")
 # --------------------------------------------------------------------------- #
 def DeforumAnimArgs():
     animation_mode = '2D'
-    max_frames = 120
+    max_frames = 30
     border = 'replicate'
 
     angle = "0:(0)"
@@ -205,8 +205,9 @@ def DeforumAnimArgs():
     perspective_flip_fv = "0:(53)"
     noise_schedule = "0: (0.02)"
 
-    # Strength schedule — tuned for 8 steps (granularity ~ 0.125)
-    strength_schedule = "0: (0.625), 12: (0.625), 24: (0.75), 36: (0.75), 38: (0.625)"
+    # Strength schedule — lower = more coherent, higher = more creative
+    # With 8 steps, keep between 0.3-0.5 for stable animation
+    strength_schedule = "0: (0.35), 12: (0.35), 24: (0.45), 36: (0.45), 38: (0.35)"
 
     contrast_schedule = "0: (1.0)"
     hybrid_comp_alpha_schedule = "0:(1)"
@@ -294,7 +295,7 @@ def DeforumArgs():
 
     seed = -1
     sampler = 'Default Scheduler'
-    steps = 4
+    steps = 8
     scale = 1.0
     dynamic_threshold = None
     static_threshold = None
