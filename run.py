@@ -187,7 +187,7 @@ print(f"[DEBUG] VAE scale factor: {root.pipe.vae_scale_factor}")
 # --------------------------------------------------------------------------- #
 def DeforumAnimArgs():
     animation_mode = '2D'
-    max_frames = 30
+    max_frames = 120
     border = 'replicate'
 
     angle = "0:(0)"
