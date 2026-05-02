@@ -166,6 +166,11 @@ def ModelSetup():
 
 root.__dict__.update(ModelSetup())
 
+# Debug: show latent space info
+print(f"[DEBUG] VAE latent_channels: {root.pipe.vae.config.latent_channels}")
+print(f"[DEBUG] Transformer in_channels: {root.pipe.transformer.config.in_channels}")
+print(f"[DEBUG] VAE scale factor: {root.pipe.vae_scale_factor}")
+
 
 # %%
 # --------------------------------------------------------------------------- #
