@@ -4,8 +4,7 @@ generate.py - FLUX.2-klein-4B image generation for Deforum
 Uses diffusers Flux2KleinPipeline. Provides generate() / add_noise()
 interface for render.py.
 
-img2img via flow-matching noise injection:
-  z_t = strength * noise + (1 - strength) * encode(prev_frame)
+img2img via flow-matching noise injection with latent channel matching.
 """
 
 import os
@@ -31,6 +30,15 @@ def uint_number(datum, number):
     return datum
 
 
+def _get_latent_shape(pipe, height, width):
+    """Get the correct latent (B, C, H, W) shape the pipeline expects."""
+    num_ch = pipe.transformer.config.in_channels // 4
+    vae_scale = pipe.vae_scale_factor
+    h_lat = height // vae_scale
+    w_lat = width // vae_scale
+    return (1, num_ch, h_lat, w_lat)
+
+
 def _vae_encode(pipe, image_tensor):
     """Encode image tensor [B, C, H, W] in [-1, 1] to scaled latent space."""
     vae = pipe.vae
@@ -51,15 +59,6 @@ def _vae_encode(pipe, image_tensor):
         latent = latent - cfg.shift_factor
 
     return latent
-
-
-def _pack_latents(latents):
-    """Pack (B, C, H, W) → (B, H/2*W/2, C*4) for FLUX transformer."""
-    b, c, h, w = latents.shape
-    latents = latents.view(b, c, h // 2, 2, w // 2, 2)
-    latents = latents.permute(0, 2, 4, 1, 3, 5)
-    latents = latents.reshape(b, (h // 2) * (w // 2), c * 4)
-    return latents
 
 
 def _vae_decode(pipe, latent):
@@ -85,6 +84,28 @@ def _tensor_to_pil(tensor):
     return Image.fromarray(img)
 
 
+def _match_latent_channels(latent, target_channels, noise_fill=None):
+    """Pad or trim latent channels to match what the transformer expects.
+
+    Extra channels are filled with noise_fill if provided, else zeros.
+    """
+    vae_ch = latent.shape[1]
+    if vae_ch == target_channels:
+        return latent
+    if vae_ch > target_channels:
+        return latent[:, :target_channels, :, :]
+    # Pad: fill extra channels
+    pad_ch = target_channels - vae_ch
+    if noise_fill is not None:
+        padding = noise_fill[:, vae_ch:target_channels, :, :]
+    else:
+        padding = torch.zeros(
+            latent.shape[0], pad_ch, latent.shape[2], latent.shape[3],
+            dtype=latent.dtype, device=latent.device
+        )
+    return torch.cat([latent, padding], dim=1)
+
+
 def generate(args, root, frame=0, return_latent=False, return_sample=False, return_c=False):
     """Generate an image using FLUX.2-klein-4B."""
     seed_everything(args.seed)
@@ -98,6 +119,10 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
     batch_size = args.n_samples
     if batch_size > 1:
         raise NotImplementedError("Batch size > 1 not supported yet")
+
+    # Correct latent shape for this pipeline
+    latent_shape = _get_latent_shape(pipe, args.H, args.W)
+    target_channels = latent_shape[1]
 
     # --- Resolve init image / latent ---
     init_latent = None
@@ -135,42 +160,30 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
     with torch.no_grad():
         if init_latent is not None and args.strength > 0:
             # === IMG2IMG — flow-matching noise injection ===
+            # Generate noise in the shape the transformer expects
             noise = torch.randn(
-                init_latent.shape, dtype=dtype,
+                latent_shape, dtype=dtype,
                 generator=torch.Generator(device="cpu").manual_seed(args.seed),
             ).to(device=device)
 
-            t = args.strength
-            noisy_latent = t * noise + (1.0 - t) * init_latent
+            # Match VAE latent channels to transformer channels
+            init_latent_matched = _match_latent_channels(
+                init_latent, target_channels, noise_fill=noise
+            )
 
-            try:
-                output = pipe(
-                    prompt=cond_prompt,
-                    height=args.H,
-                    width=args.W,
-                    num_inference_steps=args.steps,
-                    guidance_scale=args.scale,
-                    latents=noisy_latent,
-                    generator=generator,
-                    output_type="pt",
-                )
-            except TypeError:
-                # Fallback: pass previous frame as reference image
-                print("[generate] 'latents' not supported, using reference image fallback")
-                ref_pil = _tensor_to_pil(
-                    _vae_decode(pipe, init_latent) if init_image_tensor is None
-                    else init_image_tensor
-                )
-                output = pipe(
-                    prompt=cond_prompt,
-                    image=[ref_pil],
-                    height=args.H,
-                    width=args.W,
-                    num_inference_steps=args.steps,
-                    guidance_scale=args.scale,
-                    generator=generator,
-                    output_type="pt",
-                )
+            t = args.strength
+            noisy_latent = t * noise + (1.0 - t) * init_latent_matched
+
+            output = pipe(
+                prompt=cond_prompt,
+                height=args.H,
+                width=args.W,
+                num_inference_steps=args.steps,
+                guidance_scale=args.scale,
+                latents=noisy_latent,
+                generator=generator,
+                output_type="pt",
+            )
 
             x_samples = output.images * 2.0 - 1.0  # [0,1] → [-1,1]
 
