@@ -1,9 +1,8 @@
 """
 generate.py - FLUX.2-klein-4B image generation for Deforum
 
-Uses diffusers Flux2KleinPipeline. Every frame is txt2img, then
-blended with the warped previous frame for animation coherence.
-Klein is distilled and doesn't support classical latent-space img2img.
+Uses Flux2KleinPipeline with native image conditioning.
+Frame 0: txt2img. Frame 1+: warped previous frame as reference image.
 """
 
 import os
@@ -11,7 +10,7 @@ import torch
 import numpy as np
 from PIL import Image
 from pytorch_lightning import seed_everything
-from einops import rearrange, repeat
+from einops import rearrange
 from .load_images import load_img, prepare_overlay_mask
 
 
@@ -29,8 +28,15 @@ def uint_number(datum, number):
     return datum
 
 
+def _tensor_to_pil(tensor):
+    """Convert [1, C, H, W] tensor in [-1, 1] to PIL Image."""
+    img = tensor[0].clamp(-1, 1).permute(1, 2, 0).cpu().float().numpy()
+    img = ((img * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(img)
+
+
 def generate(args, root, frame=0, return_latent=False, return_sample=False, return_c=False):
-    """Generate an image using FLUX.2-klein-4B."""
+    """Generate an image using FLUX.2-klein-4B with native image conditioning."""
     seed_everything(args.seed)
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -41,10 +47,15 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
     cond_prompt = args.cond_prompt
     assert cond_prompt is not None
 
+    # Build reference image from warped previous frame
+    ref_image = None
+    if args.init_sample is not None:
+        ref_image = _tensor_to_pil(args.init_sample)
+
     results = []
 
     with torch.no_grad():
-        output = pipe(
+        pipe_kwargs = dict(
             prompt=cond_prompt,
             height=args.H,
             width=args.W,
@@ -53,15 +64,13 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
             generator=generator,
             output_type="pt",
         )
+
+        if ref_image is not None:
+            pipe_kwargs["image"] = ref_image
+
+        output = pipe(**pipe_kwargs)
         x_samples = output.images * 2.0 - 1.0  # [0,1] → [-1,1]
         x_samples = x_samples.to(device)
-
-        # Blend with warped previous frame for animation coherence
-        # strength controls how much new content vs previous frame:
-        #   strength=1.0 → fully new (first frame)
-        #   strength=0.3 → 30% new + 70% warped previous
-        if args.init_sample is not None and args.strength < 1.0:
-            x_samples = args.strength * x_samples + (1.0 - args.strength) * args.init_sample.to(device)
 
         # --- Collect results ---
 
@@ -69,12 +78,7 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
             results.append(None)
 
         if args.use_mask and args.overlay_mask:
-            init_image_tensor = None
-            if args.init_sample_raw is not None:
-                init_image_tensor = args.init_sample_raw
-            elif args.init_sample is not None:
-                init_image_tensor = args.init_sample
-
+            init_image_tensor = args.init_sample_raw or args.init_sample
             if init_image_tensor is not None:
                 if args.mask_sample is None or getattr(args, 'using_vid_init', False):
                     args.mask_sample = prepare_overlay_mask(args, root, init_image_tensor.shape)
