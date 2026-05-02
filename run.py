@@ -280,7 +280,7 @@ def DeforumArgs():
 
     seed = -1
     sampler = 'Default Scheduler'
-    steps = 8
+    steps = 4
     scale = 1.0
     dynamic_threshold = None
     static_threshold = None

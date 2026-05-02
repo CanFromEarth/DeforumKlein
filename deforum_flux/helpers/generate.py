@@ -53,6 +53,15 @@ def _vae_encode(pipe, image_tensor):
     return latent
 
 
+def _pack_latents(latents):
+    """Pack (B, C, H, W) → (B, H/2*W/2, C*4) for FLUX transformer."""
+    b, c, h, w = latents.shape
+    latents = latents.view(b, c, h // 2, 2, w // 2, 2)
+    latents = latents.permute(0, 2, 4, 1, 3, 5)
+    latents = latents.reshape(b, (h // 2) * (w // 2), c * 4)
+    return latents
+
+
 def _vae_decode(pipe, latent):
     """Decode scaled latent to image tensor [B, C, H, W]."""
     vae = pipe.vae
@@ -133,6 +142,7 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
 
             t = args.strength
             noisy_latent = t * noise + (1.0 - t) * init_latent
+            noisy_latent = _pack_latents(noisy_latent)
 
             try:
                 output = pipe(

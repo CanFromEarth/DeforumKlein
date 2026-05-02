@@ -310,7 +310,7 @@ def DeforumArgs():
     # 8 steps: compromise between speed (4) and strength granularity (30)
     seed = -1
     sampler = 'Klein Default Scheduler'
-    steps = 8
+    steps = 4
     scale = 1.0  # distilled model: CFG not needed, keep at 1.0
     dynamic_threshold = None
     static_threshold = None
