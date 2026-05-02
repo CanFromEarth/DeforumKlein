@@ -142,7 +142,6 @@ def generate(args, root, frame=0, return_latent=False, return_sample=False, retu
 
             t = args.strength
             noisy_latent = t * noise + (1.0 - t) * init_latent
-            noisy_latent = _pack_latents(noisy_latent)
 
             try:
                 output = pipe(
